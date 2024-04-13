@@ -1,10 +1,10 @@
 import express from 'express'
 import mongoose from 'mongoose'
+import multer from 'multer'
 
 import { loginValidation, registerValidation, postCreateValidation } from './validations.js'
-import checkAuth from './utils/checkAuth.js'
-import * as UserController from './controllers/UserController.js'
-import * as PostController from './controllers/PostController.js'
+import { checkAuth, handleValidationErrors } from './utils/index.js'
+import { UserController, PostController } from './controllers/index.js'
 
 mongoose.connect('mongodb+srv://Pipola:9953@cluster0.dwmoi20.mongodb.net/blog?retryWrites=true&w=majority&appName=Cluster0')
   .then(() => console.log('DB OK'))
@@ -12,17 +12,36 @@ mongoose.connect('mongodb+srv://Pipola:9953@cluster0.dwmoi20.mongodb.net/blog?re
 // mongodb + srv://Pipola:<password>@cluster0.dwmoi20.mongodb.net/
 
 const app = express()
-app.use(express.json())
 
-app.post('/auth/login', loginValidation, UserController.login)
-app.post('/auth/register', registerValidation, UserController.register)
+const storage = multer.diskStorage({
+  destination: (_, __, cb) => {
+    cb(null, 'uploads')
+  },
+  filename: (_, file, cb) => {
+    cb(null, file.originalname)
+  }
+})
+
+const upload = multer({ storage })
+
+app.use(express.json())
+app.use('/uploads', express.static('uploads'))
+
+app.post('/auth/login', loginValidation, handleValidationErrors, UserController.login)
+app.post('/auth/register', registerValidation, handleValidationErrors, UserController.register)
 app.get('/auth/me', checkAuth, UserController.getMe)
 
-// app.get('/posts', PostController.getAll)
-// app.get('/posts/:id', PostController.getOne)
-app.post('/posts', checkAuth, postCreateValidation, PostController.create)
-// app.delete('/posts', PostController.remove)
-// app.patch('/posts', PostController.update)
+app.post('/upload', checkAuth, upload.single('image'), (req, res) => {
+  res.json({
+    url: `/uploads/${req.file.originalname}`
+  })
+})
+
+app.get('/posts', PostController.getAll)
+app.get('/posts/:id', PostController.getOne)
+app.post('/posts', checkAuth, postCreateValidation, handleValidationErrors, PostController.create)
+app.delete('/posts/:id', checkAuth, PostController.remove)
+app.patch('/posts:id', checkAuth, postCreateValidation, handleValidationErrors, PostController.update)
 
 app.listen(4444, (err) => {
   if (err) return console.log(err)
